@@ -1,7 +1,7 @@
 import requests
 import csv
 
-language_id = 'ary'
+language_id = 'ibo'
 
 # Step 1: Download the file
 url = f"https://raw.githubusercontent.com/afrisenti-semeval/afrisent-semeval-2023/main/data/{language_id}/train.tsv"

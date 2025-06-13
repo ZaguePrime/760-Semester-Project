@@ -1,49 +1,55 @@
 import torch
 import joblib
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer
 import torch.nn as nn
+from transformers import AutoModel
+import os
 
-class MultiTaskModel(nn.Module):
-    def __init__(self, base_model_name, num_langs, num_sentiments):
+# --- CONFIG ---
+MODEL_NAME = "Davlan/afro-xlmr-base"
+SAVE_DIR = "lang_id_model"
+TEXT = "Waliomua kinyama mtoto wasakwa gt"  # Change this to whatever text you want to test
+
+# --- MODEL DEFINITION ---
+class LangIDModel(nn.Module):
+    def __init__(self, model_name, num_langs):
         super().__init__()
-        self.encoder = AutoModel.from_pretrained(base_model_name)
+        self.encoder = AutoModel.from_pretrained(model_name)
         hidden_size = self.encoder.config.hidden_size
-        self.lang_classifier = nn.Linear(hidden_size, num_langs)
-        self.sentiment_classifier = nn.Linear(hidden_size, num_sentiments)
+        self.classifier = nn.Linear(hidden_size, num_langs)
 
-    def forward(self, input_ids, attention_mask):
+    def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-        pooled = outputs.last_hidden_state[:, 0]
-        lang_logits = self.lang_classifier(pooled)
-        sentiment_logits = self.sentiment_classifier(pooled)
-        return lang_logits, sentiment_logits
+        pooled = outputs.last_hidden_state[:, 0]  # CLS token
+        logits = self.classifier(pooled)
 
-# Load tokenizer and encoders
-model_dir = "multitask_afrosenti_model"
-tokenizer = AutoTokenizer.from_pretrained(model_dir)
-lang_encoder = joblib.load("lang_encoder.pkl")
-sentiment_encoder = joblib.load("sentiment_encoder.pkl")
+        loss = None
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits, labels)
 
-# Load model
-num_langs = len(lang_encoder.classes_)
-num_sentiments = len(sentiment_encoder.classes_)
-model = MultiTaskModel(model_dir, num_langs, num_sentiments)
-model.load_state_dict(torch.load(f"{model_dir}/pytorch_model.bin", map_location="cpu"))
+        return {"loss": loss, "logits": logits}
+
+# --- LOAD TOKENIZER + LABEL ENCODER ---
+tokenizer = AutoTokenizer.from_pretrained(SAVE_DIR)
+lang_encoder = joblib.load(os.path.join(SAVE_DIR, "lang_encoder.pkl"))
+
+# --- LOAD MODEL ---
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = LangIDModel(MODEL_NAME, num_langs=len(lang_encoder.classes_))
+model.load_state_dict(torch.load(os.path.join(SAVE_DIR, "pytorch_model.bin"), map_location=device))
+model.to(device)
 model.eval()
 
-def predict(text):
-    inputs = tokenizer(text, return_tensors="pt", truncation=True)
+# --- PREDICT FUNCTION ---
+def predict_language(text):
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True).to(device)
     with torch.no_grad():
-        lang_logits, sentiment_logits = model(**inputs)
-        lang_pred = torch.argmax(lang_logits, dim=1).item()
-        sentiment_pred = torch.argmax(sentiment_logits, dim=1).item()
+        outputs = model(**inputs)
+        logits = outputs["logits"]
+        pred_id = torch.argmax(logits, dim=1).item()
+        return lang_encoder.inverse_transform([pred_id])[0]
 
-    lang_label = lang_encoder.inverse_transform([lang_pred])[0]
-    sentiment_label = sentiment_encoder.inverse_transform([sentiment_pred])[0]
-    return lang_label, sentiment_label
-
-# Example usage
-if __name__ == "__main__":
-    tweet = ""
-    lang, sentiment = predict(tweet)
-    print(f"Language: {lang} | Sentiment: {sentiment}")
+# --- RUN PREDICTION ---
+predicted_lang = predict_language(TEXT)
+print(f"🧠 Predicted Language: {predicted_lang}")

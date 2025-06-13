@@ -10,32 +10,31 @@ import os
 # --- CONFIG ---
 MODEL_NAME = "Davlan/afro-xlmr-base"
 DATA_PATH = "all_languages_train_shuffled.tsv"
-SAVE_DIR = "multitask_afrosenti_model"
+SAVE_DIR = "lang_id_model"
 EPOCHS = 3
-BATCH_SIZE = 4
+BATCH_SIZE = 64
+
+# --- DEVICE ---
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"🚀 Using device: {device}")
+print(f"PyTorch version: {torch.__version__}")
 
 # --- LOAD & ENCODE DATA ---
 df = pd.read_csv(DATA_PATH, sep='\t')
 lang_encoder = LabelEncoder()
-sentiment_encoder = LabelEncoder()
-
 df['lang_id'] = lang_encoder.fit_transform(df['language'])
-df['sentiment_id'] = sentiment_encoder.fit_transform(df['label'])
 
-# --- SAVE ENCODERS ---
 os.makedirs(SAVE_DIR, exist_ok=True)
 joblib.dump(lang_encoder, f"{SAVE_DIR}/lang_encoder.pkl")
-joblib.dump(sentiment_encoder, f"{SAVE_DIR}/sentiment_encoder.pkl")
 
 # --- TOKENIZER ---
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
 # --- DATASET ---
-class MultiTaskDataset(Dataset):
-    def __init__(self, texts, lang_labels, sentiment_labels):
+class LangIDDataset(Dataset):
+    def __init__(self, texts, lang_labels):
         self.texts = texts
         self.lang_labels = lang_labels
-        self.sentiment_labels = sentiment_labels
 
     def __len__(self):
         return len(self.texts)
@@ -45,51 +44,41 @@ class MultiTaskDataset(Dataset):
         return {
             "input_ids": encodings["input_ids"].squeeze(0),
             "attention_mask": encodings["attention_mask"].squeeze(0),
-            "lang_label": torch.tensor(self.lang_labels[idx]),
-            "sentiment_label": torch.tensor(self.sentiment_labels[idx]),
+            "labels": torch.tensor(self.lang_labels[idx]),
         }
 
-train_dataset = MultiTaskDataset(
+train_dataset = LangIDDataset(
     df['text'].tolist(),
-    df['lang_id'].tolist(),
-    df['sentiment_id'].tolist()
+    df['lang_id'].tolist()
 )
 
 # --- MODEL ---
-class MultiTaskModel(nn.Module):
-    def __init__(self, model_name, num_langs, num_sentiments):
+class LangIDModel(nn.Module):
+    def __init__(self, model_name, num_langs):
         super().__init__()
         self.encoder = AutoModel.from_pretrained(model_name)
         hidden_size = self.encoder.config.hidden_size
-        self.lang_classifier = nn.Linear(hidden_size, num_langs)
-        self.sentiment_classifier = nn.Linear(hidden_size, num_sentiments)
+        self.classifier = nn.Linear(hidden_size, num_langs)
 
-    def forward(self, input_ids, attention_mask, lang_label=None, sentiment_label=None):
+    def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
         pooled = outputs.last_hidden_state[:, 0]  # CLS token
-        lang_logits = self.lang_classifier(pooled)
-        sentiment_logits = self.sentiment_classifier(pooled)
-        return {
-            "loss": None,
-            "lang_logits": lang_logits,
-            "sentiment_logits": sentiment_logits,
-            "lang_label": lang_label,
-            "sentiment_label": sentiment_label,
-        }
+        logits = self.classifier(pooled)
+
+        loss = None
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits, labels)
+
+        return {"loss": loss, "logits": logits}
 
 # --- CUSTOM TRAINER ---
-class MultiTaskTrainer(Trainer):
+class LangIDTrainer(Trainer):
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
-        lang_labels = inputs.pop("lang_label")
-        sentiment_labels = inputs.pop("sentiment_label")
-        outputs = model(**inputs)
-
-        lang_loss = nn.CrossEntropyLoss()(outputs["lang_logits"], lang_labels)
-        sentiment_loss = nn.CrossEntropyLoss()(outputs["sentiment_logits"], sentiment_labels)
-        total_loss = lang_loss + sentiment_loss
-
-        return (total_loss, outputs) if return_outputs else total_loss
-
+        labels = inputs.pop("labels")
+        outputs = model(**inputs, labels=labels)
+        loss = outputs["loss"]
+        return (loss, outputs) if return_outputs else loss
 
 # --- TRAINING ARGS ---
 training_args = TrainingArguments(
@@ -100,19 +89,31 @@ training_args = TrainingArguments(
     save_strategy="epoch",
     logging_dir=os.path.join(SAVE_DIR, "logs"),
     logging_steps=50,
-    save_total_limit=1
+    save_total_limit=1,
+    fp16=True,
 )
 
-# --- FINAL SETUP ---
-model = MultiTaskModel(
+# --- Custom Collator ---
+
+class CustomDataCollator(DataCollatorWithPadding):
+    def __call__(self, features):
+        labels = [f.pop("labels") for f in features]
+        batch = super().__call__(features)  # pad input_ids and attention_mask
+        batch["labels"] = torch.stack(labels)
+        return batch
+
+
+# --- SETUP MODEL ---
+model = LangIDModel(
     MODEL_NAME,
-    num_langs=len(lang_encoder.classes_),
-    num_sentiments=len(sentiment_encoder.classes_)
-)
+    num_langs=len(lang_encoder.classes_)
+).to(device)
 
-collator = DataCollatorWithPadding(tokenizer)
 
-trainer = MultiTaskTrainer(
+
+collator = CustomDataCollator(tokenizer)
+
+trainer = LangIDTrainer(
     model=model,
     args=training_args,
     train_dataset=train_dataset,
@@ -124,6 +125,6 @@ trainer = MultiTaskTrainer(
 trainer.train()
 
 # --- SAVE MODEL + TOKENIZER ---
-trainer.save_model(SAVE_DIR)
+torch.save(model.state_dict(), os.path.join(SAVE_DIR, "pytorch_model.bin"))
 tokenizer.save_pretrained(SAVE_DIR)
 print(f"✅ Training complete. Model saved to {SAVE_DIR}")

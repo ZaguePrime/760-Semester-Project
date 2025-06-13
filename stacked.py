@@ -65,6 +65,8 @@ class StackedDataset(Dataset):
             "sentiment_labels": torch.tensor(self.sentiment_labels[idx], dtype=torch.long),
         }
         print(out.keys())  # Should print all 6 keys every time
+        print('THE FUCKING KEYS')
+        print(out)
         return out
 
 
@@ -145,7 +147,7 @@ print(f'------------------\n{len(lang_labels)}')
 sentiment_labels = df["sentiment_id"].tolist()
 print(f'------------------\n{len(sentiment_labels)}')
 
-exit()
+# exit()
 
 dataset = StackedDataset(texts, lang_labels, sentiment_labels, langid_tokenizer, sentiment_tokenizer)
 collator = StackedDataCollator(langid_tokenizer, sentiment_tokenizer)
@@ -170,6 +172,7 @@ training_args = TrainingArguments(
     save_strategy="epoch",
     eval_strategy="no",
     fp16=True,
+    label_names=["lang_labels", "sentiment_labels"],
 )
 
 trainer = StackedTrainer(

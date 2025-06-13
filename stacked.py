@@ -65,8 +65,6 @@ class StackedDataset(Dataset):
             "sentiment_labels": torch.tensor(self.sentiment_labels[idx], dtype=torch.long),
         }
         print(out.keys())  # Should print all 6 keys every time
-        print('THE FUCKING KEYS')
-        print(out)
         return out
 
 
@@ -120,7 +118,7 @@ class StackedSentimentModel(nn.Module):
         self.classifier = nn.Linear(hidden_size_sentiment + num_langs, num_sentiment_classes)
 
     def forward(self, sentiment_input_ids, sentiment_attention_mask,
-                langid_input_ids, langid_attention_mask):
+                langid_input_ids, langid_attention_mask, **kwargs):  # 👈 Accept extra keys
         langid_logits = self.langid_model(langid_input_ids, langid_attention_mask)
         langid_probs = torch.softmax(langid_logits, dim=1)
         sentiment_outputs = self.sentiment_encoder(input_ids=sentiment_input_ids, attention_mask=sentiment_attention_mask)
@@ -129,15 +127,17 @@ class StackedSentimentModel(nn.Module):
         logits = self.classifier(combined)
         return logits
 
+
 from transformers import Trainer
 
 class StackedTrainer(Trainer):
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         labels = inputs.pop("sentiment_labels")
         outputs = model(**inputs)
         loss_fct = nn.CrossEntropyLoss()
         loss = loss_fct(outputs, labels)
         return (loss, outputs) if return_outputs else loss
+
 
 # Prepare dataset from real data
 texts = df["text"].tolist()

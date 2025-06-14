@@ -13,6 +13,7 @@ import json
 
 # Configs
 LANGID_MODEL_NAME = "Davlan/afro-xlmr-base"
+# AFRISENTI_MODEL_NAME = "Davlan/afrisenti-twitter-sentiment-afroxlmr-large"
 AFRISENTI_MODEL_NAME = "Davlan/afro-xlmr-base"
 DATA_PATH = "all_languages_train_shuffled.tsv"
 MODE = 1  # Set to 1 for regular train/val split, 2 for K-fold cross validation

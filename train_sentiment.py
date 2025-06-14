@@ -1,71 +1,48 @@
 import pandas as pd
-from datasets import Dataset
-from transformers import (
-    AutoTokenizer, AutoModelForSequenceClassification,
-    Trainer, TrainingArguments, DataCollatorWithPadding
-)
-from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+import os
 import joblib
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.metrics import classification_report, accuracy_score
 
-# === Load TSV ===
-df = pd.read_csv("data/combined.tsv", sep="\t")
+# --- Load Data ---
+df = pd.read_csv('all_languages_train_shuffled.tsv', sep='\t')
+df = df[['text', 'label', 'language']].dropna()
+df = df.sample(frac=1, random_state=42).reset_index(drop=True)
 
-# === Encode sentiment label column ===
-sentiment_encoder = LabelEncoder()
-df["label"] = sentiment_encoder.fit_transform(df["label"])
-df = df[["text", "label"]]
+# --- Train/Test Split ---
+X = df[['text', 'language']]
+y = df['label']
+X_train, X_test, y_train, y_test = train_test_split(X, y, stratify=y, test_size=0.2, random_state=42)
 
-# === Save label encoder ===
-joblib.dump(sentiment_encoder, "sentiment_model/sentiment_encoder.pkl")
+# --- ColumnTransformer ---
+preprocessor = ColumnTransformer(transformers=[
+    ('tfidf', TfidfVectorizer(max_features=5000, ngram_range=(1, 2)), 'text'),
+    ('lang_enc', OneHotEncoder(handle_unknown='ignore'), 'language')
+])
 
-# === Split into train/test ===
-train_df, test_df = train_test_split(df, test_size=0.2, stratify=df["label"], random_state=42)
+# --- Pipeline ---
+model_pipeline = Pipeline([
+    ('preprocessor', preprocessor),
+    ('classifier', MultinomialNB())
+])
 
-# === Convert to HuggingFace Dataset ===
-train_dataset = Dataset.from_pandas(train_df)
-test_dataset = Dataset.from_pandas(test_df)
+# --- Train ---
+print("Training model with language as feature...")
+model_pipeline.fit(X_train, y_train)
+print("Training complete.")
 
-# === Tokenizer and Model ===
-model_name = "Davlan/afro-xlmr-base"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+# --- Evaluate ---
+y_pred = model_pipeline.predict(X_test)
+print("\nSentiment Classification Report:")
+print(classification_report(y_test, y_pred))
+print(f"Accuracy: {accuracy_score(y_test, y_pred):.4f}")
 
-train_dataset = train_dataset.map(lambda x: tokenizer(x["text"], truncation=True), batched=True)
-test_dataset = test_dataset.map(lambda x: tokenizer(x["text"], truncation=True), batched=True)
-
-model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(sentiment_encoder.classes_))
-
-# === Compute metrics ===
-def compute_metrics(eval_pred):
-    logits, labels = eval_pred
-    preds = logits.argmax(axis=-1)
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average="weighted")
-    acc = accuracy_score(labels, preds)
-    return {"accuracy": acc, "precision": precision, "recall": recall, "f1": f1}
-
-# === Trainer ===
-training_args = TrainingArguments(
-    output_dir="sentiment_model",
-    evaluation_strategy="epoch",
-    save_strategy="epoch",
-    per_device_train_batch_size=16,
-    num_train_epochs=3,
-    logging_dir="sentiment_model/logs",
-    load_best_model_at_end=True,
-)
-
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_dataset,
-    eval_dataset=test_dataset,
-    tokenizer=tokenizer,
-    data_collator=DataCollatorWithPadding(tokenizer),
-    compute_metrics=compute_metrics,
-)
-
-# === Train and Save ===
-trainer.train()
-trainer.save_model("sentiment_model/model")
-tokenizer.save_pretrained("sentiment_model/tokenizer")
+# --- Save ---
+os.makedirs("final", exist_ok=True)
+joblib.dump(model_pipeline, "final/sentiment_nb_with_lang.joblib")
+print("\nModel saved to 'final/sentiment_nb_with_lang.joblib'")

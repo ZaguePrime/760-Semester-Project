@@ -8,22 +8,26 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import joblib
+import os
 
 # === Load TSV ===
 df = pd.read_csv("all_languages_train_shuffled.tsv", sep="\t")
 
-# === Encode language column ===
-lang_encoder = LabelEncoder()
-df["label"] = lang_encoder.fit_transform(df["language"])
-df = df[["text", "label"]]
+# === Ensure 'text', 'label', 'language' columns exist ===
+df = df[["text", "label", "language"]].dropna()
+
+# === Encode sentiment label column ===
+sentiment_encoder = LabelEncoder()
+df["label"] = sentiment_encoder.fit_transform(df["label"])
 
 # === Save label encoder ===
-joblib.dump(lang_encoder, "langid_model/lang_encoder.pkl")
+os.makedirs("baseline_model", exist_ok=True)
+joblib.dump(sentiment_encoder, "baseline_model/sentiment_encoder.pkl")
 
-# === Split into train/test ===
+# === Train/test split ===
 train_df, test_df = train_test_split(df, test_size=0.2, stratify=df["label"], random_state=42)
 
-# === Convert to HuggingFace Dataset ===
+# === Convert to HuggingFace Datasets ===
 train_dataset = Dataset.from_pandas(train_df)
 test_dataset = Dataset.from_pandas(test_df)
 
@@ -31,12 +35,17 @@ test_dataset = Dataset.from_pandas(test_df)
 model_name = "Davlan/afro-xlmr-base"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
+# Tokenize the text (without adding language info)
 train_dataset = train_dataset.map(lambda x: tokenizer(x["text"], truncation=True), batched=True)
 test_dataset = test_dataset.map(lambda x: tokenizer(x["text"], truncation=True), batched=True)
 
-model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(lang_encoder.classes_))
+# Define model for classification
+model = AutoModelForSequenceClassification.from_pretrained(
+    model_name,
+    num_labels=len(sentiment_encoder.classes_)
+)
 
-# === Compute metrics ===
+# === Define metrics ===
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     preds = logits.argmax(axis=-1)
@@ -44,17 +53,19 @@ def compute_metrics(eval_pred):
     acc = accuracy_score(labels, preds)
     return {"accuracy": acc, "precision": precision, "recall": recall, "f1": f1}
 
-# === Trainer ===
+# === Trainer arguments ===
 training_args = TrainingArguments(
-    output_dir="langid_model",
+    output_dir="sentiment_model",
     eval_strategy="epoch",
     save_strategy="epoch",
-    per_device_train_batch_size=16,
+    per_device_train_batch_size=32,
+    per_device_eval_batch_size=32,
     num_train_epochs=3,
-    logging_dir="langid_model/logs",
+    logging_dir="baseline_model/logs",
     load_best_model_at_end=True,
 )
 
+# === Trainer ===
 trainer = Trainer(
     model=model,
     args=training_args,
@@ -67,5 +78,5 @@ trainer = Trainer(
 
 # === Train and Save ===
 trainer.train()
-trainer.save_model("langid_model/model")
-tokenizer.save_pretrained("langid_model/tokenizer")
+trainer.save_model("baseline_model/model")
+tokenizer.save_pretrained("baseline_model/tokenizer")

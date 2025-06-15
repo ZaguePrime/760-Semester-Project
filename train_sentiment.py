@@ -11,7 +11,7 @@ import joblib
 import os
 
 # === Load TSV ===
-df = pd.read_csv("all_languages_train_shuffled", sep="\t")
+df = pd.read_csv("all_languages_train_shuffled.tsv", sep="\t")
 
 # === Ensure 'text', 'label', 'language' columns exist ===
 df = df[["text", "label", "language"]].dropna()

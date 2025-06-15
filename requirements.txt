@@ -9,3 +9,4 @@ joblib
 requests
 accelerate
 datasets
+trainer

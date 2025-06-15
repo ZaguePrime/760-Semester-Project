@@ -40,9 +40,9 @@ for label in class_labels:
 
 # === Determine final prediction ===
 predicted_class = max(results, key=results.get)
-print(f"\n📝 Input Text: {text}")
-print(f"🌍 Language: {language}")
-print(f"\n🔮 Predicted Sentiment: {predicted_class.upper()}")
-print("\n📊 Confidence Scores:")
+print(f"\nInput Text: {text}")
+print(f"Language: {language}")
+print(f"\nPredicted Sentiment: {predicted_class.upper()}")
+print("\nConfidence Scores:")
 for label, score in results.items():
     print(f" - {label}: {score:.4f}")

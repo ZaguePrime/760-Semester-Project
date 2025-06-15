@@ -80,3 +80,26 @@ trainer = Trainer(
 trainer.train()
 trainer.save_model("baseline_model/model")
 tokenizer.save_pretrained("baseline_model/tokenizer")
+
+# === Evaluate on test set ===
+import torch
+from sklearn.metrics import classification_report
+
+# Get true labels
+true_labels = test_dataset["label"]
+
+# Predict
+predictions = trainer.predict(test_dataset)
+preds = torch.tensor(predictions.predictions).argmax(dim=-1).numpy()
+
+# Decode labels
+true_sentiments = sentiment_encoder.inverse_transform(true_labels)
+predicted_sentiments = sentiment_encoder.inverse_transform(preds)
+
+# === Print Report ===
+print("\n=== Sentiment Analysis Results ===")
+accuracy = accuracy_score(true_sentiments, predicted_sentiments)
+print(f"Sentiment Analysis Accuracy: {accuracy:.4f}\n")
+
+print("Sentiment Classification Report:")
+print(classification_report(true_sentiments, predicted_sentiments, digits=4))

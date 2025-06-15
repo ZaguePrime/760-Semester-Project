@@ -19,7 +19,7 @@ os.makedirs("sentiment_model", exist_ok=True)
 
 # === Loop through each class (One-vs-All) ===
 for target_label in classes:
-    print(f"\n🔁 Training model for sentiment class: {target_label}")
+    print(f"\nTraining model for sentiment class: {target_label}")
 
     # Binary relabeling: 1 if this class, 0 otherwise
     df_bin = df.copy()

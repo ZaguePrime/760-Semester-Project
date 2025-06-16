@@ -18,6 +18,7 @@ from sklearn.metrics import roc_curve, auc
 
 # Paths
 BASE_DIR = "../pipeline_model"
+SEPARATOR = " </s> "
 os.makedirs(BASE_DIR, exist_ok=True)
 
 # Load dataset
@@ -106,8 +107,8 @@ sent_test_df = test_df.copy()
 sent_train_df["label"] = sent_encoder.transform(sent_train_df["label"])
 sent_test_df["label"] = sent_encoder.transform(sent_test_df["label"])
 # Prepend language information to text
-sent_train_df["text"] = sent_train_df["language"] + " [SEP] " + sent_train_df["text"]
-sent_test_df["text"] = sent_test_df["language"] + " [SEP] " + sent_test_df["text"]
+sent_train_df["text"] = sent_train_df["language"] + SEPARATOR + sent_train_df["text"]
+sent_test_df["text"] = sent_test_df["language"] + SEPARATOR + sent_test_df["text"]
 
 sent_tokenizer = AutoTokenizer.from_pretrained(model_name)
 sent_train_ds = Dataset.from_pandas(sent_train_df)
@@ -165,7 +166,7 @@ for i in range(len(test_df)):
     pred_lang = lang_encoder.inverse_transform([pred_lang_id])[0]
 
     # Step 2: Sentiment analysis with predicted language
-    new_text = f"{pred_lang} [SEP] {raw_text}"
+    new_text = f"{pred_lang}{SEPARATOR}{raw_text}"
     sent_input = sent_tokenizer(new_text, return_tensors="pt", truncation=True).to(device)
     with torch.no_grad():
         sent_logits = sent_model(**sent_input).logits
@@ -227,7 +228,7 @@ sent_true_bin = label_binarize(sent_true, classes=range(n_classes))
 sent_logits_array = []
 with torch.no_grad():
     for i in range(len(test_df)):
-        input_text = f"{lang_encoder.inverse_transform([lang_preds[i]])[0]} [SEP] {test_df.iloc[i]['text']}"
+        input_text = f"{lang_encoder.inverse_transform([lang_preds[i]])[0]}{SEPARATOR}{test_df.iloc[i]['text']}"
         inputs = sent_tokenizer(input_text, return_tensors="pt", truncation=True, padding=True).to(device)
         logits = sent_model(**inputs).logits
         sent_logits_array.append(logits.detach().cpu().numpy().flatten())

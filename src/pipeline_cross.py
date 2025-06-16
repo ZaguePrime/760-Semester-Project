@@ -14,6 +14,7 @@ import numpy as np
 
 # Paths
 BASE_DIR = "../pipeline_cv"
+SEPARATOR = " [SEP] "
 os.makedirs(BASE_DIR, exist_ok=True)
 
 # Load dataset
@@ -91,8 +92,8 @@ for fold, (train_idx, test_idx) in enumerate(folds):
     sent_test_df = test_df.copy()
     sent_train_df["label"] = sent_encoder.transform(sent_train_df["label"])
     sent_test_df["label"] = sent_encoder.transform(sent_test_df["label"])
-    sent_train_df["text"] = sent_train_df["language"] + " [SEP] " + sent_train_df["text"]
-    sent_test_df["text"] = sent_test_df["language"] + " [SEP] " + sent_test_df["text"]
+    sent_train_df["text"] = sent_train_df["language"] + SEPARATOR + sent_train_df["text"]
+    sent_test_df["text"] = sent_test_df["language"] + SEPARATOR + sent_test_df["text"]
 
     sent_tokenizer = AutoTokenizer.from_pretrained(model_name)
     sent_train_ds = Dataset.from_pandas(sent_train_df)
@@ -139,7 +140,7 @@ for fold, (train_idx, test_idx) in enumerate(folds):
         pred_lang_id = lang_logits.argmax(dim=-1).item()
         pred_lang = lang_encoder.inverse_transform([pred_lang_id])[0]
 
-        new_text = f"{pred_lang} [SEP] {raw_text}"
+        new_text = f"{pred_lang}{SEPARATOR}{raw_text}"
         sent_input = sent_tokenizer(new_text, return_tensors="pt", truncation=True).to(device)
         with torch.no_grad():
             sent_logits = sent_model(**sent_input).logits

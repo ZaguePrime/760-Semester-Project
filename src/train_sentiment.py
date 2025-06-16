@@ -62,7 +62,7 @@ def compute_metrics(eval_pred):
 # === Trainer arguments ===
 training_args = TrainingArguments(
     output_dir=DIR,
-    evaluation_strategy="epoch",
+    eval_strategy="epoch",
     save_strategy="epoch",
     per_device_train_batch_size=32,
     per_device_eval_batch_size=32,

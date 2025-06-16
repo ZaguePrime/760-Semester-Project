@@ -13,7 +13,7 @@ from datasets import Dataset
 import numpy as np
 
 # Paths
-BASE_DIR = "../pipline_cv"
+BASE_DIR = "../pipeline_cv"
 os.makedirs(BASE_DIR, exist_ok=True)
 
 # Load dataset

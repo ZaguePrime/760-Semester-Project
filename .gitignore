@@ -166,7 +166,10 @@ ensemble_model/*
 multitask_afrosenti_model/*
 stacked_sentiment_model/*
 cv_pipeline/*
-
+baseline_model_cv/*
+pipeline_model/*
+pipeline_cv/*
+pipline_cv/*
 
 
 .idea/760-testing.iml

@@ -15,7 +15,7 @@ DIR = "../langid_model"
 os.makedirs(DIR, exist_ok=True)
 
 # === Load TSV ===
-df = pd.read_csv("all_languages_train_shuffled.tsv", sep="\t")
+df = pd.read_csv("../language_datasets/all_languages_train_shuffled.tsv", sep="\t")
 
 # === Encode language column ===
 lang_encoder = LabelEncoder()
@@ -52,7 +52,7 @@ def compute_metrics(eval_pred):
 # === Trainer ===
 training_args = TrainingArguments(
     output_dir=DIR,
-    evaluation_strategy="epoch",
+    eval_strategy="epoch",
     save_strategy="epoch",
     per_device_train_batch_size=16,
     num_train_epochs=3,

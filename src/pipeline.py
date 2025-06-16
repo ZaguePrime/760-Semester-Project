@@ -106,7 +106,7 @@ for fold, (train_idx, test_idx) in enumerate(folds):
         eval_strategy="epoch",
         save_strategy="epoch",
         per_device_train_batch_size=32,
-        num_train_epochs=1,
+        num_train_epochs=3,
         logging_dir=os.path.join(fold_dir, "sent_logs"),
         load_best_model_at_end=True
     )

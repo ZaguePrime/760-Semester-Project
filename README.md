@@ -14,11 +14,21 @@
 - To run the baseline and get f-1 score evaluation, run baseline.py and the same goes to see our implementation with pipeline.py.
 - To use your own input and see the results, run pipeline_predictor.py and paste your text when prompted.
 - The train_langid.py and train_sentiment.py files were used as proof of concept for putting the pipeline together, and are not neccessary to see the implementation in action.
+- If you would like to view the cross-validation, you may run baseline_cross.py and pipeline_cross.py.
 # Folder Breakdown
+## baseline_model
+- This folder will be created and will contain the baseline model after it is trained, this can be used to see how it predicts on user input.
+## baseline_model_cv
+- This folder will be created when cross-validation is run, and it will contain the data for each fold.
+## langid_model
+- This contains the stand-alone language identification model.
 ## language_datasets
-This folder contains datasets for the languages chosen to work with. It also contains a .tsv file that has all language datasets shuffled into one for training and test purposes.
+- This folder contains datasets for the languages chosen to work with. It also contains a .tsv file that has all language datasets shuffled into one for training and test purposes.
+## pipeline_model
+- This contains the full pipeline model, including both language identification and sentiment analysis.
+## pipeline_cv
+- This will contain the cross-fold validation folds and the model information used after training the pipeline model.
+## sentiment model
+- This contains the stand-alone sentiment analysis model.
 ## src
-This folder contains the .py or python files needed to run the model training and predicting. It is expected that you run pipeline.py to train and save the models locally as the files are too large to be uploaded to github.
-## cv_pipeline
-This will contain the cross-fold validation folds and the model information used during the training.
--- Need to add more here--
+- This folder contains the .py or python files needed to run the model training and predicting. It is expected that you run pipeline.py to train and save the models locally as the files are too large to be uploaded to github.

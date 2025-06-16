@@ -171,7 +171,7 @@ pipeline_model/*
 pipeline_cv/*
 pipline_cv/*
 
-
+.idea/*
 .idea/760-testing.iml
 .idea/misc.xml
 .idea/modules.xml

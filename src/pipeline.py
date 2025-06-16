@@ -12,6 +12,10 @@ from transformers import (
 from datasets import Dataset
 import numpy as np
 
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import label_binarize
+from sklearn.metrics import roc_curve, auc
+
 # Paths
 BASE_DIR = "../pipeline_model"
 os.makedirs(BASE_DIR, exist_ok=True)
@@ -208,3 +212,48 @@ results = {
 }
 joblib.dump(results, os.path.join(BASE_DIR, "pipeline_results.pkl"))
 print(f"\nResults saved to {BASE_DIR}/pipeline_results.pkl")
+
+
+
+print("\n-- Plotting ROC-AUC for Sentiment Classes --")
+
+# Get number of classes
+n_classes = len(sent_encoder.classes_)
+
+# Binarize true labels
+sent_true_bin = label_binarize(sent_true, classes=range(n_classes))
+
+# Convert logits list to array
+sent_logits_array = []
+with torch.no_grad():
+    for i in range(len(test_df)):
+        input_text = f"{lang_encoder.inverse_transform([lang_preds[i]])[0]} [SEP] {test_df.iloc[i]['text']}"
+        inputs = sent_tokenizer(input_text, return_tensors="pt", truncation=True, padding=True).to(device)
+        logits = sent_model(**inputs).logits
+        sent_logits_array.append(logits.detach().cpu().numpy().flatten())
+sent_logits_array = np.array(sent_logits_array)
+
+
+# Plot ROC for each class
+fpr = dict()
+tpr = dict()
+roc_auc = dict()
+
+plt.figure(figsize=(10, 8))
+for i in range(n_classes):
+    fpr[i], tpr[i], _ = roc_curve(sent_true_bin[:, i], sent_logits_array[:, i])
+    roc_auc[i] = auc(fpr[i], tpr[i])
+    plt.plot(fpr[i], tpr[i], lw=2, label=f'{sent_encoder.classes_[i]} (AUC = {roc_auc[i]:.2f})')
+
+plt.plot([0, 1], [0, 1], linestyle='--', color='gray', lw=2)
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Sentiment ROC Curve per Class')
+plt.legend(loc="lower right")
+plt.grid(True)
+
+roc_path = os.path.join(BASE_DIR, "sentiment_roc_per_class.png")
+plt.savefig(roc_path)
+print(f"ROC curves saved to: {roc_path}")

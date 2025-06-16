@@ -18,6 +18,10 @@ from transformers import (
     Trainer, TrainingArguments, DataCollatorWithPadding
 )
 
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import label_binarize
+from sklearn.metrics import roc_curve, auc
+
 # === Directory configuration ===
 DIR = "../baseline_model"
 
@@ -130,3 +134,38 @@ results = {
 
 joblib.dump(results, os.path.join(DIR, "test_results.pkl"))
 print(f"\nResults saved to {os.path.join(DIR, 'test_results.pkl')}")
+print("\n=== Plotting ROC-AUC Curve ===")
+
+# One-hot encode true labels
+y_true = label_binarize(true_labels, classes=list(range(num_labels)))
+
+# Get raw scores
+logits = torch.tensor(predictions.predictions).detach().numpy()
+
+# Compute ROC curve and AUC per class
+fpr, tpr, roc_auc = {}, {}, {}
+for i in range(num_labels):
+    fpr[i], tpr[i], _ = roc_curve(y_true[:, i], logits[:, i])
+    roc_auc[i] = auc(fpr[i], tpr[i])
+
+# Plot setup
+plt.figure(figsize=(10, 8))
+colors = plt.colormaps["tab10"]
+
+for i in range(num_labels):
+    plt.plot(fpr[i], tpr[i], color=colors(i / num_labels), lw=2,
+             label=f"{sentiment_encoder.classes_[i]} (AUC = {roc_auc[i]:.2f})")
+
+plt.plot([0, 1], [0, 1], "k--", lw=1)
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC-AUC Curve by Sentiment Class")
+plt.legend(loc="lower right")
+plt.grid(True)
+
+# Save the plot
+roc_path = os.path.join(DIR, "roc_auc_curve.png")
+plt.savefig(roc_path)
+print(f"ROC-AUC plot saved to {roc_path}")

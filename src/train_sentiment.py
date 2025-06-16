@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from datasets import Dataset
 from transformers import (
@@ -8,7 +9,10 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import joblib
-import os
+
+# === Configurable model directory ===
+DIR = "../sentiment_model"
+os.makedirs(DIR, exist_ok=True)
 
 # === Load TSV ===
 df = pd.read_csv("../language_datasets/all_languages_train_shuffled.tsv", sep="\t")
@@ -24,8 +28,7 @@ df["label"] = sentiment_encoder.fit_transform(df["label"])
 df["text"] = df["language"] + " [SEP] " + df["text"]
 
 # === Save label encoder ===
-os.makedirs("../sentiment_model", exist_ok=True)
-joblib.dump(sentiment_encoder, "../sentiment_model/sentiment_encoder.pkl")
+joblib.dump(sentiment_encoder, os.path.join(DIR, "sentiment_encoder.pkl"))
 
 # === Train/test split ===
 train_df, test_df = train_test_split(df, test_size=0.2, stratify=df["label"], random_state=42)
@@ -58,13 +61,13 @@ def compute_metrics(eval_pred):
 
 # === Trainer arguments ===
 training_args = TrainingArguments(
-    output_dir="sentiment_model",
-    eval_strategy="epoch",
+    output_dir=DIR,
+    evaluation_strategy="epoch",
     save_strategy="epoch",
     per_device_train_batch_size=32,
     per_device_eval_batch_size=32,
     num_train_epochs=3,
-    logging_dir="sentiment_model/logs",
+    logging_dir=os.path.join(DIR, "logs"),
     load_best_model_at_end=True,
 )
 
@@ -81,5 +84,5 @@ trainer = Trainer(
 
 # === Train and Save ===
 trainer.train()
-trainer.save_model("../sentiment_model/model")
-tokenizer.save_pretrained("../sentiment_model/tokenizer")
+trainer.save_model(os.path.join(DIR, "model"))
+tokenizer.save_pretrained(os.path.join(DIR, "tokenizer"))

@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from datasets import Dataset
 from transformers import (
@@ -9,6 +10,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import joblib
 
+# === Configurable model directory ===
+DIR = "../langid_model"
+os.makedirs(DIR, exist_ok=True)
+
 # === Load TSV ===
 df = pd.read_csv("all_languages_train_shuffled.tsv", sep="\t")
 
@@ -18,7 +23,7 @@ df["label"] = lang_encoder.fit_transform(df["language"])
 df = df[["text", "label"]]
 
 # === Save label encoder ===
-joblib.dump(lang_encoder, "../langid_model/lang_encoder.pkl")
+joblib.dump(lang_encoder, os.path.join(DIR, "lang_encoder.pkl"))
 
 # === Split into train/test ===
 train_df, test_df = train_test_split(df, test_size=0.2, stratify=df["label"], random_state=42)
@@ -46,12 +51,12 @@ def compute_metrics(eval_pred):
 
 # === Trainer ===
 training_args = TrainingArguments(
-    output_dir="langid_model",
-    eval_strategy="epoch",
+    output_dir=DIR,
+    evaluation_strategy="epoch",
     save_strategy="epoch",
     per_device_train_batch_size=16,
     num_train_epochs=3,
-    logging_dir="langid_model/logs",
+    logging_dir=os.path.join(DIR, "logs"),
     load_best_model_at_end=True,
 )
 
@@ -67,5 +72,5 @@ trainer = Trainer(
 
 # === Train and Save ===
 trainer.train()
-trainer.save_model("../langid_model/model")
-tokenizer.save_pretrained("../langid_model/tokenizer")
+trainer.save_model(os.path.join(DIR, "model"))
+tokenizer.save_pretrained(os.path.join(DIR, "tokenizer"))

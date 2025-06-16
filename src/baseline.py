@@ -5,7 +5,7 @@ import numpy as np
 import joblib
 
 from datasets import Dataset
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import (
     classification_report,
@@ -18,6 +18,9 @@ from transformers import (
     Trainer, TrainingArguments, DataCollatorWithPadding
 )
 
+# === Directory configuration ===
+DIR = "../baseline_model"
+
 # === Load and prepare dataset ===
 df = pd.read_csv("../language_datasets/all_languages_train_shuffled.tsv", sep="\t")
 df = df[["text", "label", "language"]].dropna()
@@ -28,100 +31,102 @@ df["label"] = sentiment_encoder.fit_transform(df["label"])
 num_labels = len(sentiment_encoder.classes_)
 
 # Save encoder
-os.makedirs("../baseline_model", exist_ok=True)
-joblib.dump(sentiment_encoder, "../baseline_model/sentiment_encoder.pkl")
+os.makedirs(DIR, exist_ok=True)
+joblib.dump(sentiment_encoder, os.path.join(DIR, "sentiment_encoder.pkl"))
 
 # === Tokenizer and model ===
 model_name = "Davlan/afro-xlmr-base"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-# === Metric storage ===
-all_preds = []
-all_trues = []
-fold_metrics = []
+# === Train-test split (80/20) ===
+train_df, test_df = train_test_split(
+    df, 
+    test_size=0.2, 
+    random_state=42, 
+    stratify=df["label"]
+)
 
-# === Cross-validation setup ===
-skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+print(f"Training set size: {len(train_df)}")
+print(f"Test set size: {len(test_df)}")
 
-for fold, (train_idx, val_idx) in enumerate(skf.split(df["text"], df["label"])):
-    print(f"\n=== Fold {fold + 1} ===")
+# Convert to HuggingFace Datasets
+train_ds = Dataset.from_pandas(train_df)
+test_ds = Dataset.from_pandas(test_df)
 
-    train_df = df.iloc[train_idx]
-    val_df = df.iloc[val_idx]
+# Tokenize
+train_ds = train_ds.map(lambda x: tokenizer(x["text"], truncation=True), batched=True)
+test_ds = test_ds.map(lambda x: tokenizer(x["text"], truncation=True), batched=True)
 
-    # Convert to HuggingFace Datasets
-    train_ds = Dataset.from_pandas(train_df)
-    val_ds = Dataset.from_pandas(val_df)
+# Define model
+model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
 
-    # Tokenize
-    train_ds = train_ds.map(lambda x: tokenizer(x["text"], truncation=True), batched=True)
-    val_ds = val_ds.map(lambda x: tokenizer(x["text"], truncation=True), batched=True)
+# Training arguments
+training_args = TrainingArguments(
+    output_dir=DIR,
+    eval_strategy="epoch",
+    save_strategy="epoch",
+    save_total_limit=2,
+    per_device_train_batch_size=32,
+    per_device_eval_batch_size=32,
+    num_train_epochs=3,
+    logging_dir=os.path.join(DIR, "logs"),
+    load_best_model_at_end=True,
+    metric_for_best_model="eval_loss",
+    greater_is_better=False,
+)
 
-    # Define model
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_ds,
+    eval_dataset=test_ds,
+    tokenizer=tokenizer,
+    data_collator=DataCollatorWithPadding(tokenizer),
+)
 
-    # Training arguments
-    fold_output_dir = f"baseline_model/fold_{fold + 1}"
-    os.makedirs(fold_output_dir, exist_ok=True)
+# Train the model
+print("\n=== Training Model ===")
+trainer.train()
 
-    training_args = TrainingArguments(
-        output_dir=fold_output_dir,
-        eval_strategy="epoch",
-        save_strategy="no",
-        per_device_train_batch_size=32,
-        per_device_eval_batch_size=32,
-        num_train_epochs=3,
-        logging_dir=os.path.join(fold_output_dir, "logs"),
-        load_best_model_at_end=False,
-    )
+# Save the final model and tokenizer
+print(f"\n=== Saving Model to {DIR} ===")
+trainer.save_model(DIR)
+tokenizer.save_pretrained(DIR)
 
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_ds,
-        eval_dataset=val_ds,
-        tokenizer=tokenizer,
-        data_collator=DataCollatorWithPadding(tokenizer),
-    )
+# === Final Evaluation ===
+print("\n=== Final Evaluation ===")
+predictions = trainer.predict(test_ds)
+preds = torch.tensor(predictions.predictions).argmax(dim=-1).numpy()
+true_labels = np.array(test_ds["label"])
 
-    trainer.train()
+# Compute metrics
+acc = accuracy_score(true_labels, preds)
+prec, rec, f1, _ = precision_recall_fscore_support(true_labels, preds, average="weighted")
 
-    # Predict
-    predictions = trainer.predict(val_ds)
-    preds = torch.tensor(predictions.predictions).argmax(dim=-1).numpy()
-    true_labels = np.array(val_ds["label"])
+print(f"Test Set Metrics:")
+print(f"Accuracy:  {acc:.4f}")
+print(f"Precision: {prec:.4f}")
+print(f"Recall:    {rec:.4f}")
+print(f"F1-score:  {f1:.4f}")
 
-    # Store all predictions
-    all_preds.extend(preds)
-    all_trues.extend(true_labels)
-
-    # Compute metrics
-    acc = accuracy_score(true_labels, preds)
-    prec, rec, f1, _ = precision_recall_fscore_support(true_labels, preds, average="weighted")
-
-    print(f"Fold {fold+1} Metrics:")
-    print(f"Accuracy:  {acc:.4f}")
-    print(f"Precision: {prec:.4f}")
-    print(f"Recall:    {rec:.4f}")
-    print(f"F1-score:  {f1:.4f}")
-
-    fold_metrics.append({"accuracy": acc, "precision": prec, "recall": rec, "f1": f1})
-
-# === Aggregate evaluation ===
-print("\n=== Final Cross-Validation Results ===")
-
-# Average metrics
-avg_metrics = {
-    metric: np.mean([fm[metric] for fm in fold_metrics])
-    for metric in ["accuracy", "precision", "recall", "f1"]
-}
-
-for k, v in avg_metrics.items():
-    print(f"Avg {k.capitalize()}: {v:.4f}")
-
-# Decode final predictions for full classification report
-true_sentiments = sentiment_encoder.inverse_transform(all_trues)
-predicted_sentiments = sentiment_encoder.inverse_transform(all_preds)
+# Decode predictions for full classification report
+true_sentiments = sentiment_encoder.inverse_transform(true_labels)
+predicted_sentiments = sentiment_encoder.inverse_transform(preds)
 
 print("\nFull Classification Report:")
 print(classification_report(true_sentiments, predicted_sentiments, digits=4))
+
+# Save test results
+results = {
+    "accuracy": acc,
+    "precision": prec,
+    "recall": rec,
+    "f1": f1,
+    "true_labels": true_labels.tolist(),
+    "predictions": preds.tolist(),
+    "true_sentiments": true_sentiments.tolist(),
+    "predicted_sentiments": predicted_sentiments.tolist()
+}
+
+joblib.dump(results, os.path.join(DIR, "test_results.pkl"))
+print(f"\nResults saved to {os.path.join(DIR, 'test_results.pkl')}")

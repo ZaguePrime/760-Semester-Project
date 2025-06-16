@@ -165,6 +165,7 @@ sentiment_model/*
 ensemble_model/*
 multitask_afrosenti_model/*
 stacked_sentiment_model/*
+cv_pipeline/*
 
 
 

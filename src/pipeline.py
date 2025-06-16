@@ -16,40 +16,37 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import label_binarize
 from sklearn.metrics import roc_curve, auc
 
-# Paths
+# configuration
 BASE_DIR = "../pipeline_model"
 SEPARATOR = " </s> "
 os.makedirs(BASE_DIR, exist_ok=True)
 
-# Load dataset
+# data preparation
 df = pd.read_csv("../language_datasets/all_languages_train_shuffled.tsv", sep="\t")
 df = df[["text", "label", "language"]].dropna()
 
-# Setup train-test split (80/20)
 train_df, test_df = train_test_split(
     df, 
     test_size=0.2, 
     random_state=42, 
-    stratify=df["label"]  # Stratify by sentiment label to maintain class balance
+    stratify=df["label"]
 )
 
 print(f"Training set size: {len(train_df)}")
 print(f"Test set size: {len(test_df)}")
 
-# Global encoders
+# encoder setup
 lang_encoder = LabelEncoder()
 lang_encoder.fit(df["language"])
 sent_encoder = LabelEncoder()
 sent_encoder.fit(df["label"])
 
-# Save encoders for later use
 joblib.dump(lang_encoder, os.path.join(BASE_DIR, "lang_encoder.pkl"))
 joblib.dump(sent_encoder, os.path.join(BASE_DIR, "sent_encoder.pkl"))
 
-# Model base
+# language model setup
 model_name = "Davlan/afro-xlmr-base"
 
-# Metrics function
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     preds = logits.argmax(axis=-1)
@@ -59,7 +56,6 @@ def compute_metrics(eval_pred):
 
 print("\n==== Training Language Identification Model ====")
 
-# Language DataPrep
 lang_train_df = train_df[["text", "language"]].copy()
 lang_test_df = test_df[["text", "language"]].copy()
 lang_train_df["label"] = lang_encoder.transform(lang_train_df["language"])
@@ -97,16 +93,18 @@ lang_trainer = Trainer(
     data_collator=DataCollatorWithPadding(lang_tokenizer),
     compute_metrics=compute_metrics
 )
+
+# train and save language model
 lang_trainer.train()
+lang_model.save_pretrained(os.path.join(BASE_DIR, "lang_model"))
+lang_tokenizer.save_pretrained(os.path.join(BASE_DIR, "lang_model"))
 
 print("\n==== Training Sentiment Analysis Model ====")
-
-# Sentiment DataPrep
+# sentiment model setup
 sent_train_df = train_df.copy()
 sent_test_df = test_df.copy()
 sent_train_df["label"] = sent_encoder.transform(sent_train_df["label"])
 sent_test_df["label"] = sent_encoder.transform(sent_test_df["label"])
-# Prepend language information to text
 sent_train_df["text"] = sent_train_df["language"] + SEPARATOR + sent_train_df["text"]
 sent_test_df["text"] = sent_test_df["language"] + SEPARATOR + sent_test_df["text"]
 
@@ -142,11 +140,13 @@ sent_trainer = Trainer(
     data_collator=DataCollatorWithPadding(sent_tokenizer),
     compute_metrics=compute_metrics
 )
+# train and save sentiment model
 sent_trainer.train()
+sent_model.save_pretrained(os.path.join(BASE_DIR, "sent_model"))
+sent_tokenizer.save_pretrained(os.path.join(BASE_DIR, "sent_model"))
 
+# pretty print results evaluating the full pipeline
 print("\n==== Evaluating Full Pipeline ====")
-
-# Evaluate pipeline
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 lang_model.to(device)
 sent_model.to(device)
@@ -158,31 +158,27 @@ for i in range(len(test_df)):
     true_lang = test_df.iloc[i]["language"]
     true_sent = test_df.iloc[i]["label"]
 
-    # Step 1: Language identification
     lang_input = lang_tokenizer(raw_text, return_tensors="pt", truncation=True).to(device)
     with torch.no_grad():
         lang_logits = lang_model(**lang_input).logits
     pred_lang_id = lang_logits.argmax(dim=-1).item()
     pred_lang = lang_encoder.inverse_transform([pred_lang_id])[0]
 
-    # Step 2: Sentiment analysis with predicted language
     new_text = f"{pred_lang}{SEPARATOR}{raw_text}"
     sent_input = sent_tokenizer(new_text, return_tensors="pt", truncation=True).to(device)
     with torch.no_grad():
         sent_logits = sent_model(**sent_input).logits
     pred_sent_id = sent_logits.argmax(dim=-1).item()
 
-    # Store predictions and true labels
     lang_preds.append(pred_lang_id)
     lang_true.append(lang_encoder.transform([true_lang])[0])
     sent_preds.append(pred_sent_id)
     sent_true.append(sent_encoder.transform([true_sent])[0])
 
-    # Progress indicator
     if (i + 1) % 100 == 0:
         print(f"Processed {i + 1}/{len(test_df)} test samples")
 
-# === Final Results ===
+# print final results
 print("\n=== Final Pipeline Results ===")
 print(f"Test set size: {len(test_df)} samples")
 
@@ -202,7 +198,6 @@ print(f"\n-- Overall Pipeline Performance --")
 print(f"Language ID Accuracy: {lang_accuracy:.4f}")
 print(f"Sentiment Analysis Accuracy: {sent_accuracy:.4f}")
 
-# Save results
 results = {
     'lang_accuracy': lang_accuracy,
     'sent_accuracy': sent_accuracy,
@@ -215,16 +210,12 @@ joblib.dump(results, os.path.join(BASE_DIR, "pipeline_results.pkl"))
 print(f"\nResults saved to {BASE_DIR}/pipeline_results.pkl")
 
 
-
+# plot auc roc curve
 print("\n-- Plotting ROC-AUC for Sentiment Classes --")
-
-# Get number of classes
 n_classes = len(sent_encoder.classes_)
 
-# Binarize true labels
 sent_true_bin = label_binarize(sent_true, classes=range(n_classes))
 
-# Convert logits list to array
 sent_logits_array = []
 with torch.no_grad():
     for i in range(len(test_df)):
@@ -235,7 +226,6 @@ with torch.no_grad():
 sent_logits_array = np.array(sent_logits_array)
 
 
-# Plot ROC for each class
 fpr = dict()
 tpr = dict()
 roc_auc = dict()

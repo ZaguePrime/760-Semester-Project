@@ -10,29 +10,25 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import joblib
 
-# === Configurable model directory ===
+# Config
 DIR = "../langid_model"
 os.makedirs(DIR, exist_ok=True)
 
-# === Load TSV ===
+# dataset and encoder
 df = pd.read_csv("../language_datasets/all_languages_train_shuffled.tsv", sep="\t")
 
-# === Encode language column ===
 lang_encoder = LabelEncoder()
 df["label"] = lang_encoder.fit_transform(df["language"])
 df = df[["text", "label"]]
 
-# === Save label encoder ===
 joblib.dump(lang_encoder, os.path.join(DIR, "lang_encoder.pkl"))
 
-# === Split into train/test ===
 train_df, test_df = train_test_split(df, test_size=0.2, stratify=df["label"], random_state=42)
 
-# === Convert to HuggingFace Dataset ===
 train_dataset = Dataset.from_pandas(train_df)
 test_dataset = Dataset.from_pandas(test_df)
 
-# === Tokenizer and Model ===
+# model setup
 model_name = "Davlan/afro-xlmr-base"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
@@ -41,7 +37,6 @@ test_dataset = test_dataset.map(lambda x: tokenizer(x["text"], truncation=True),
 
 model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=len(lang_encoder.classes_))
 
-# === Compute metrics ===
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     preds = logits.argmax(axis=-1)
@@ -49,7 +44,6 @@ def compute_metrics(eval_pred):
     acc = accuracy_score(labels, preds)
     return {"accuracy": acc, "precision": precision, "recall": recall, "f1": f1}
 
-# === Trainer ===
 training_args = TrainingArguments(
     output_dir=DIR,
     eval_strategy="epoch",
@@ -70,7 +64,7 @@ trainer = Trainer(
     compute_metrics=compute_metrics,
 )
 
-# === Train and Save ===
+# Save ,model
 trainer.train()
 trainer.save_model(os.path.join(DIR, "model"))
 tokenizer.save_pretrained(os.path.join(DIR, "tokenizer"))

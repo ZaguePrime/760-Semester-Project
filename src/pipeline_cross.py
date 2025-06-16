@@ -12,20 +12,20 @@ from transformers import (
 from datasets import Dataset
 import numpy as np
 
-# Paths
+# configuration
 BASE_DIR = "../pipeline_cv"
 SEPARATOR = " [SEP] "
 os.makedirs(BASE_DIR, exist_ok=True)
 
-# Load dataset
+# setup dataset
 df = pd.read_csv("../language_datasets/all_languages_train_shuffled.tsv", sep="\t")
 df = df[["text", "label", "language"]].dropna()
 
-# Setup cross-validation
+# setup cross validation
 kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 folds = list(kfold.split(df, df["label"]))
 
-# Global encoders
+# encoders
 lang_encoder = LabelEncoder()
 lang_encoder.fit(df["language"])
 sent_encoder = LabelEncoder()
@@ -34,7 +34,7 @@ sent_encoder.fit(df["label"])
 # Model base
 model_name = "Davlan/afro-xlmr-base"
 
-# Metrics function
+# metrics function
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     preds = logits.argmax(axis=-1)
@@ -42,19 +42,19 @@ def compute_metrics(eval_pred):
     acc = accuracy_score(labels, preds)
     return {"accuracy": acc, "precision": p, "recall": r, "f1": f1}
 
-# Track overall scores
 all_lang_preds, all_lang_true = [], []
 all_sent_preds, all_sent_true = [], []
 
+# folds
 for fold, (train_idx, test_idx) in enumerate(folds):
+    # setup fold directory
     print(f"\n==== Fold {fold+1}/5 ====")
     fold_dir = os.path.join(BASE_DIR, f"fold_{fold}")
     os.makedirs(fold_dir, exist_ok=True)
 
-    # Split data
+    # Language DataPrep and Model setup
     train_df, test_df = df.iloc[train_idx], df.iloc[test_idx]
 
-    # Language DataPrep
     lang_train_df = train_df[["text", "language"]].copy()
     lang_test_df = test_df[["text", "language"]].copy()
     lang_train_df["label"] = lang_encoder.transform(lang_train_df["language"])
@@ -85,9 +85,10 @@ for fold, (train_idx, test_idx) in enumerate(folds):
         data_collator=DataCollatorWithPadding(lang_tokenizer),
         compute_metrics=compute_metrics
     )
+    # train language model
     lang_trainer.train()
 
-    # Sentiment DataPrep
+    # Sentiment DataPrep and Model setup
     sent_train_df = train_df.copy()
     sent_test_df = test_df.copy()
     sent_train_df["label"] = sent_encoder.transform(sent_train_df["label"])
@@ -120,9 +121,10 @@ for fold, (train_idx, test_idx) in enumerate(folds):
         data_collator=DataCollatorWithPadding(sent_tokenizer),
         compute_metrics=compute_metrics
     )
+    # train sentiment model
     sent_trainer.train()
 
-    # Evaluate pipeline
+    # evaluate
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     lang_model.to(device)
     sent_model.to(device)
@@ -151,13 +153,12 @@ for fold, (train_idx, test_idx) in enumerate(folds):
         sent_preds.append(pred_sent_id)
         sent_true.append(sent_encoder.transform([true_sent])[0])
 
-    # Store all
     all_lang_preds.extend(lang_preds)
     all_lang_true.extend(lang_true)
     all_sent_preds.extend(sent_preds)
     all_sent_true.extend(sent_true)
 
-# === Final Results ===
+# pretty print results
 print("\n=== Final Cross-Validation Results ===")
 print("\n-- Language Identification --")
 print(f"Accuracy: {accuracy_score(all_lang_true, all_lang_preds):.4f}")

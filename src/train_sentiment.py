@@ -10,48 +10,39 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 import joblib
 
-# === Configurable model directory ===
+# config
 DIR = "../sentiment_model"
 os.makedirs(DIR, exist_ok=True)
 
-# === Load TSV ===
+# dataset and encoder
 df = pd.read_csv("../language_datasets/all_languages_train_shuffled.tsv", sep="\t")
 
-# === Ensure 'text', 'label', 'language' columns exist ===
 df = df[["text", "label", "language"]].dropna()
 
-# === Encode sentiment label column ===
 sentiment_encoder = LabelEncoder()
 df["label"] = sentiment_encoder.fit_transform(df["label"])
 
-# === Include language as a feature by prepending to text ===
 df["text"] = df["language"] + " [SEP] " + df["text"]
 
-# === Save label encoder ===
 joblib.dump(sentiment_encoder, os.path.join(DIR, "sentiment_encoder.pkl"))
 
-# === Train/test split ===
 train_df, test_df = train_test_split(df, test_size=0.2, stratify=df["label"], random_state=42)
 
-# === Convert to HuggingFace Datasets ===
 train_dataset = Dataset.from_pandas(train_df)
 test_dataset = Dataset.from_pandas(test_df)
 
-# === Tokenizer and Model ===
+# model setup
 model_name = "Davlan/afro-xlmr-base"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-# Tokenize the text (with truncation)
 train_dataset = train_dataset.map(lambda x: tokenizer(x["text"], truncation=True), batched=True)
 test_dataset = test_dataset.map(lambda x: tokenizer(x["text"], truncation=True), batched=True)
 
-# Define model for classification
 model = AutoModelForSequenceClassification.from_pretrained(
     model_name,
     num_labels=len(sentiment_encoder.classes_)
 )
 
-# === Define metrics ===
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     preds = logits.argmax(axis=-1)
@@ -59,7 +50,6 @@ def compute_metrics(eval_pred):
     acc = accuracy_score(labels, preds)
     return {"accuracy": acc, "precision": precision, "recall": recall, "f1": f1}
 
-# === Trainer arguments ===
 training_args = TrainingArguments(
     output_dir=DIR,
     eval_strategy="epoch",
@@ -71,7 +61,6 @@ training_args = TrainingArguments(
     load_best_model_at_end=True,
 )
 
-# === Trainer ===
 trainer = Trainer(
     model=model,
     args=training_args,
@@ -82,7 +71,7 @@ trainer = Trainer(
     compute_metrics=compute_metrics,
 )
 
-# === Train and Save ===
+# saVE
 trainer.train()
 trainer.save_model(os.path.join(DIR, "model"))
 tokenizer.save_pretrained(os.path.join(DIR, "tokenizer"))

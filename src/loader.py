@@ -2,26 +2,24 @@ import os
 import requests
 import csv
 
+# configuration
 language_id = 'ibo'
-save_dir = 'language_datasets'  # e.g., data/ibo
+save_dir = 'language_datasets'  
 
-# Create the subfolder if it doesn't exist
 os.makedirs(save_dir, exist_ok=True)
 
-# Filenames with subfolder path
 original_filename = os.path.join(save_dir, f"{language_id}_train.tsv")
 modified_filename = os.path.join(save_dir, f"{language_id}_train_with_lang.tsv")
 
-# Step 1: Download the file
 url = f"https://raw.githubusercontent.com/afrisenti-semeval/afrisent-semeval-2023/main/data/{language_id}/train.tsv"
 response = requests.get(url)
 
+# augment data
 if response.status_code == 200:
     with open(original_filename, "wb") as f:
         f.write(response.content)
     print(f"Downloaded to {original_filename}")
 
-    # Step 2: Read original TSV and add a new column
     with open(original_filename, "r", encoding="utf-8") as infile, \
          open(modified_filename, "w", encoding="utf-8", newline='') as outfile:
 

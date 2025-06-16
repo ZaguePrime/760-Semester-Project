@@ -10,3 +10,4 @@ requests
 accelerate
 datasets
 trainer
+matplotlib

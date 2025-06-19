@@ -10,7 +10,7 @@
     - Yoruba (`yor`)
 # How to run
 - To run the code make sure you have all the dependencies installed, and be in the 'src' directory when running code.
-- **Note:** when running the requirement.txt to install dependencies, be sure to double check the torch version installed matches you available hardware
+- **Note:** when running the requirements.txt to install dependencies, be sure to double check the torch version installed matches your available hardware
 - The language datasets are already on the github thus there is no need to use the loader.py and mixer.py. These files are used to download datasets, shuffle and merge them all into one.
 - To run the baseline and get F-1 score evaluation, run baseline.py and the same goes to see our implementation with pipeline.py.
 - To use your own input and see the results, modify the array in the prediction.py with your own inputs and run it to get your results.

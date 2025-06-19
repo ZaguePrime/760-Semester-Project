@@ -11,8 +11,9 @@
 # How to run
 - To run the code make sure you have all the dependencies installed, and be in the 'src' directory when running code.
 - **Note:** when running the requirements.txt to install dependencies, be sure to double check the torch version installed matches your available hardware
+- **Note:** The trained models are too large to be uploaded on github, you will have to TRAIN THEM YOURSELF before using prediction.py.
 - The language datasets are already on the github thus there is no need to use the loader.py and mixer.py. These files are used to download datasets, shuffle and merge them all into one.
-- To run the baseline and get F-1 score evaluation, run baseline.py and the same goes to see our implementation with pipeline.py.
+- First train the models by running baseline.py and pipeline.py, this will also print the F-1 score metrics.
 - To use your own input and see the results, modify the array in the prediction.py with your own inputs and run it to get your results.
 - The train_langid.py and train_sentiment.py files were used as proof of concept for putting the pipeline together, and are not neccessary to see the implementation in action.
 - If you would like to view the cross-validation, you may run baseline_cross.py and pipeline_cross.py.

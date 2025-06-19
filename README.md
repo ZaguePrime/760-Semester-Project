@@ -8,6 +8,7 @@
     - Igbo (`ibo`)
     - Swahili (`swa`)
     - Yoruba (`yor`)
+- This project used python 3.10/3.11 to run, using different versions may lead to compatability issues.
 # How to run
 - To run the code make sure you have all the dependencies installed, and be in the 'src' directory when running code.
 - **Note:** when running the requirements.txt to install dependencies, be sure to double check the torch version installed matches your available hardware

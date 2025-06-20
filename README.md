@@ -8,8 +8,12 @@
     - Igbo (`ibo`)
     - Swahili (`swa`)
     - Yoruba (`yor`)
+- THIS WAS DONE ON A WINDOWS 11 OPERATING SYSTEM
 - This project used python 3.10/3.11 to run, using different versions may lead to compatability issues.
 # How to run
+- Create a python virtual environment for running the code. (python -m venv venv)
+- Activate the venv. (.\venv\scripts\activate)
+- Install the dependencies. (pip install -r requirements.txt)
 - To run the code make sure you have all the dependencies installed, and be in the 'src' directory when running code.
 - **Note:** when running the requirements.txt to install dependencies, be sure to double check the torch version installed matches your available hardware
 - **Note:** The trained models are too large to be uploaded on github, you will have to TRAIN THEM YOURSELF before using prediction.py.
